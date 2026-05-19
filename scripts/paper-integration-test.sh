@@ -144,6 +144,26 @@ log_contains() {
   [ -f "$SERVER_LOG" ] && grep -F "$needle" "$SERVER_LOG" >/dev/null 2>&1
 }
 
+wait_for_test_chunk() {
+  local marker="${RUN_ID}_CHUNK_LOADED"
+  local attempts=0
+
+  while [ "$attempts" -lt 30 ]; do
+    send_command "execute if loaded 0 80 0 run say ${marker}"
+    sleep 1
+
+    if log_contains "$marker"; then
+      return 0
+    fi
+
+    attempts=$((attempts + 1))
+  done
+
+  echo "Timed out waiting for test chunk 0,0 to load." >&2
+  tail -n 120 "$SERVER_LOG" >&2
+  exit 1
+}
+
 "$ROOT_DIR/gradlew" -p "$ROOT_DIR" clean build
 
 paper_info_file="$TEST_DIR/paper-download.txt"
@@ -197,7 +217,7 @@ wait_for_log "[NoVillagerSpawnedGolems] Enabled. Allowing iron golem spawn reaso
 
 echo "Test 1: golem created with block commands spawns"
 send_command "forceload add 0 0"
-sleep 1
+wait_for_test_chunk
 send_command "kill @e[type=minecraft:iron_golem]"
 sleep 1
 send_command "fill -4 80 -4 4 86 4 minecraft:air"

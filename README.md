@@ -24,7 +24,8 @@ Other mobs are ignored.
 ## Requirements
 
 - Paper or a compatible Bukkit/Spigot-derived server
-- Java 21+
+- Java 21+ for the plugin
+- The Java version required by your Paper server build
 - Minecraft/Paper API 1.21+
 
 ## Build

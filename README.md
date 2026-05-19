@@ -100,6 +100,10 @@ repository secret.
 Hangar publishes use the `Release` channel and list the pinned `paperApiVersion`
 as the supported Paper platform version.
 
+To publish the current already-released version to Hangar without creating a new
+GitHub release, run the `Publish Current Version to Hangar` workflow manually and
+type `publish` when prompted.
+
 ## Install
 
 1. Stop your Minecraft server.

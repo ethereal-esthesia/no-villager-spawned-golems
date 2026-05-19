@@ -8,7 +8,7 @@ SERVER_DIR="$TEST_DIR/server"
 SERVER_LOG="$SERVER_DIR/logs/latest.log"
 SERVER_STDIN="$TEST_DIR/server.stdin"
 PAPER_API="${PAPER_API:-https://fill.papermc.io/v3/projects/paper}"
-PAPER_MINECRAFT_VERSION="${PAPER_MINECRAFT_VERSION:-}"
+PAPER_MINECRAFT_VERSION="${PAPER_MINECRAFT_VERSION:-$(sed -n 's/^paperApiVersion=//p' "$ROOT_DIR/gradle.properties" | head -n 1)}"
 PAPER_CHANNEL="${PAPER_CHANNEL:-STABLE}"
 PUMPKIN_PLACE_DELAY_SECONDS="${PUMPKIN_PLACE_DELAY_SECONDS:-2}"
 RUN_ID="NVSG_$(date +%s)_$$"
@@ -175,9 +175,14 @@ paper_build="$(sed -n '3p' "$paper_info_file")"
 
 echo "Testing against Paper $paper_version build #$paper_build"
 
+if [ "$paper_version" != "$PAPER_MINECRAFT_VERSION" ]; then
+  echo "Resolved Paper version $paper_version does not match pinned version $PAPER_MINECRAFT_VERSION." >&2
+  exit 1
+fi
+
 rm -rf "$TEST_DIR"
 mkdir -p "$SERVER_DIR/plugins" "$SERVER_DIR/logs"
-cp "$BUILD_DIR/libs"/NoVillagerSpawnedGolems-*.jar "$SERVER_DIR/plugins/"
+cp "$BUILD_DIR/libs"/NoVillagerSpawnedGolems-*-paper-"$PAPER_MINECRAFT_VERSION".jar "$SERVER_DIR/plugins/"
 curl -fsSL --retry 3 --connect-timeout 15 -o "$SERVER_DIR/paper.jar" "$paper_url"
 
 cat > "$SERVER_DIR/eula.txt" <<'EOF'

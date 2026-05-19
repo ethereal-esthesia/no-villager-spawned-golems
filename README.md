@@ -24,8 +24,7 @@ Other mobs are ignored.
 ## Requirements
 
 - Paper or a compatible Bukkit/Spigot-derived server
-- Java 21+ for the plugin
-- The Java version required by your Paper server build
+- Java 25+
 - Minecraft/Paper API 1.21+
 
 ## Build
@@ -39,8 +38,11 @@ Use the included Gradle wrapper:
 The plugin jar will be written to:
 
 ```text
-build/libs/NoVillagerSpawnedGolems-1.0.0.jar
+build/libs/NoVillagerSpawnedGolems-<pluginVersion>-paper-<paperApiVersion>.jar
 ```
+
+The Paper API version is pinned in [gradle.properties](gradle.properties) and is
+also written into `plugin.yml`.
 
 ## Paper Integration Test
 
@@ -62,6 +64,7 @@ once per week.
 ## Releases
 
 Release versions are pinned from `pluginVersion` in [gradle.properties](gradle.properties).
+The supported Paper API version is pinned by `paperApiVersion` in the same file.
 
 To publish from GitHub:
 
@@ -70,8 +73,8 @@ To publish from GitHub:
 3. Run the `Release` workflow manually and type `release` when prompted.
 
 The release workflow runs the Paper integration test first. If the tests pass,
-it publishes a GitHub release tagged as `v<pluginVersion>` and attaches the
-matching jar.
+it publishes a GitHub release tagged as `v<pluginVersion>` and attaches a jar
+named with both the plugin version and Paper API version.
 
 ## Install
 

@@ -32,8 +32,10 @@ jobs:
         id: version
         run: |
           version="$(./scripts/project-version.sh)"
+          paper_api_version="$(./scripts/paper-api-version.sh)"
           tag="v${version}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "paper_api_version=${paper_api_version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Refuse duplicate tag
@@ -51,9 +53,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          PAPER_API_VERSION: ${{ steps.version.outputs.paper_api_version }}
         run: |
           gh release create "$TAG" \
-            build/libs/NoVillagerSpawnedGolems-"$VERSION".jar \
+            build/libs/NoVillagerSpawnedGolems-"$VERSION"-paper-"$PAPER_API_VERSION".jar \
             --target "$GITHUB_SHA" \
-            --title "NoVillagerSpawnedGolems $VERSION" \
-            --notes "Release $VERSION. Paper integration tests passed before publishing."
+            --title "NoVillagerSpawnedGolems $VERSION for Paper $PAPER_API_VERSION" \
+            --notes "Release $VERSION for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."

@@ -1,0 +1,26 @@
+name: Build and Paper Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 10 * * 1'
+  workflow_dispatch:
+
+jobs:
+  build-and-paper-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run Paper integration tests
+        run: ./scripts/paper-integration-test.sh

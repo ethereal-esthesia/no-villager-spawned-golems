@@ -1,0 +1,9 @@
+name: NoVillagerSpawnedGolems
+main: dev.shane.minecraft.novillagerspawnedgolems.NoVillagerSpawnedGolemsPlugin
+version: ${version}
+api-version: '1.21'
+author: Shane
+load: POSTWORLD
+description: Blocks villager-spawned iron golems while allowing player-built golems.
+commands: {}
+permissions: {}

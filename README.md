@@ -90,6 +90,16 @@ The release workflow runs the Paper integration test first. If the tests pass,
 it publishes a GitHub release tagged as `v<pluginVersion>` and attaches a jar
 named with both the plugin version and Paper API version.
 
+## Hangar Publishing
+
+The GitHub release workflows also publish successful releases to Hangar. The
+Hangar project id is pinned by `hangarProjectId` in [gradle.properties](gradle.properties),
+and GitHub Actions reads the Hangar API token from the `HANGAR_API_TOKEN`
+repository secret.
+
+Hangar publishes use the `Release` channel and list the pinned `paperApiVersion`
+as the supported Paper platform version.
+
 ## Install
 
 1. Stop your Minecraft server.

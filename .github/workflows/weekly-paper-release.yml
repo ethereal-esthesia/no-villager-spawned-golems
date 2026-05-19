@@ -70,3 +70,9 @@ jobs:
             --target "$(git rev-parse HEAD)" \
             --title "NoVillagerSpawnedGolems $VERSION for Paper $PAPER_API_VERSION" \
             --notes "Automated release for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."
+
+      - name: Publish to Hangar
+        if: steps.paper.outputs.changed == 'true'
+        env:
+          HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
+        run: ./gradlew publishPluginPublicationToHangar --stacktrace

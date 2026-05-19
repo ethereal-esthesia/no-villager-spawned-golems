@@ -60,3 +60,8 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "NoVillagerSpawnedGolems $VERSION for Paper $PAPER_API_VERSION" \
             --notes "Release $VERSION for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."
+
+      - name: Publish to Hangar
+        env:
+          HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
+        run: ./gradlew publishPluginPublicationToHangar --stacktrace

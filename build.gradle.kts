@@ -1,5 +1,8 @@
+import io.papermc.hangarpublishplugin.model.Platforms
+
 plugins {
     java
+    id("io.papermc.hangar-publish-plugin") version "0.1.2"
 }
 
 group = "dev.shane.minecraft"
@@ -8,6 +11,7 @@ description = "Paper plugin that allows player-built iron golems while blocking 
 
 val paperApiVersion = providers.gradleProperty("paperApiVersion").get()
 val paperApiDependencyVersion = providers.gradleProperty("paperApiDependencyVersion").get()
+val hangarProjectId = providers.gradleProperty("hangarProjectId").get()
 
 repositories {
     mavenCentral()
@@ -43,5 +47,22 @@ tasks {
     jar {
         archiveBaseName.set("NoVillagerSpawnedGolems")
         archiveClassifier.set("paper-$paperApiVersion")
+    }
+}
+
+hangarPublish {
+    publications.register("plugin") {
+        version.set(project.version as String)
+        channel.set("Release")
+        id.set(hangarProjectId)
+        apiKey.set(providers.environmentVariable("HANGAR_API_TOKEN"))
+        changelog.set("Release ${project.version} for Paper $paperApiVersion. Paper integration tests passed before publishing.")
+
+        platforms {
+            register(Platforms.PAPER) {
+                jar.set(tasks.jar.flatMap { it.archiveFile })
+                platformVersions.set(listOf(paperApiVersion))
+            }
+        }
     }
 }

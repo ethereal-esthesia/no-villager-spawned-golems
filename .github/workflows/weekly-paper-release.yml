@@ -1,0 +1,72 @@
+name: Weekly Paper Release
+
+on:
+  schedule:
+    - cron: '41 10 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-paper-release
+  cancel-in-progress: false
+
+jobs:
+  release-if-paper-changed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Check latest stable Paper
+        id: paper
+        run: ./scripts/update-to-latest-paper.sh
+
+      - name: No Paper release needed
+        if: steps.paper.outputs.changed != 'true'
+        run: echo "Pinned Paper version is already current; no release will be created."
+
+      - name: Run Paper integration tests
+        if: steps.paper.outputs.changed == 'true'
+        run: ./scripts/paper-integration-test.sh
+
+      - name: Refuse duplicate tag
+        if: steps.paper.outputs.changed == 'true'
+        run: |
+          tag="v${{ steps.paper.outputs.plugin_version }}"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          fi
+
+      - name: Commit Paper pin update
+        if: steps.paper.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradle.properties
+          git commit -m "Release ${{ steps.paper.outputs.plugin_version }} for Paper ${{ steps.paper.outputs.paper_api_version }}"
+          git push origin main
+
+      - name: Create GitHub release
+        if: steps.paper.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.paper.outputs.plugin_version }}
+          PAPER_API_VERSION: ${{ steps.paper.outputs.paper_api_version }}
+        run: |
+          gh release create "v$VERSION" \
+            build/libs/NoVillagerSpawnedGolems-"$VERSION"-paper-"$PAPER_API_VERSION".jar \
+            --target "$(git rev-parse HEAD)" \
+            --title "NoVillagerSpawnedGolems $VERSION for Paper $PAPER_API_VERSION" \
+            --notes "Automated release for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."

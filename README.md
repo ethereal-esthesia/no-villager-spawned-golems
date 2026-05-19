@@ -61,6 +61,20 @@ temporary local server, and verifies:
 GitHub Actions runs this test on every push, every pull request, manually, and
 once per week.
 
+## Weekly Paper Releases
+
+The `Weekly Paper Release` workflow checks the latest stable Paper version once
+per week.
+
+- If the pinned `paperApiVersion` is already current, the workflow exits without
+  publishing anything.
+- If Paper has a newer stable version, the workflow updates `gradle.properties`,
+  bumps the plugin patch version, runs the Paper integration test, commits the
+  new pin, and publishes a release.
+
+In other words: automated weekly releases happen only when the supported Paper
+version changes and the integration test passes.
+
 ## Releases
 
 Release versions are pinned from `pluginVersion` in [gradle.properties](gradle.properties).

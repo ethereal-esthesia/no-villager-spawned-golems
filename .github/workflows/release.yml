@@ -44,17 +44,20 @@ jobs:
           head_commit="$(git rev-parse HEAD)"
           short_commit="$(git rev-parse --short=12 HEAD)"
           tag="$base_tag"
+          commit_release=false
 
           if git rev-parse "$base_tag" >/dev/null 2>&1; then
             base_commit="$(git rev-list -n 1 "$base_tag")"
             if [ "$base_commit" != "$head_commit" ]; then
               tag="${base_tag}-g${short_commit}"
+              commit_release=true
             fi
           fi
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "head_commit=${head_commit}" >> "$GITHUB_OUTPUT"
           echo "short_commit=${short_commit}" >> "$GITHUB_OUTPUT"
+          echo "commit_release=${commit_release}" >> "$GITHUB_OUTPUT"
 
       - name: Refuse duplicate tag
         run: |
@@ -80,6 +83,7 @@ jobs:
             --notes "Release $VERSION for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."
 
       - name: Publish to Hangar
+        if: steps.tag.outputs.commit_release != 'true'
         env:
           HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
         run: ./gradlew publishPluginPublicationToHangar --stacktrace

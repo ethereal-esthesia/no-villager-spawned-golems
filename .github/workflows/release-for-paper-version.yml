@@ -1,6 +1,9 @@
 name: Release for Paper Version
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       confirm_release:
@@ -26,7 +29,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && inputs.confirm_release == 'release'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.confirm_release == 'release')
 
     steps:
       - name: Check out repository
@@ -43,6 +46,12 @@ jobs:
       - name: Update release metadata
         id: update
         run: |
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "Push build uses existing gradle.properties Paper pin."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           args=(--paper-version "${{ inputs.paper_version }}" --paper-dependency-version "${{ inputs.paper_dependency_version }}")
           if [ -n "${{ inputs.plugin_version }}" ]; then
             args+=(--plugin-version "${{ inputs.plugin_version }}")
@@ -65,11 +74,13 @@ jobs:
           head_commit="$(git rev-parse HEAD)"
           short_commit="$(git rev-parse --short=12 HEAD)"
           tag="$base_tag"
+          commit_release=false
 
           if git rev-parse "$base_tag" >/dev/null 2>&1; then
             base_commit="$(git rev-list -n 1 "$base_tag")"
             if [ "$base_commit" != "$head_commit" ]; then
               tag="${base_tag}-g${short_commit}"
+              commit_release=true
             fi
           fi
 
@@ -81,10 +92,11 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "head_commit=${head_commit}" >> "$GITHUB_OUTPUT"
           echo "short_commit=${short_commit}" >> "$GITHUB_OUTPUT"
+          echo "commit_release=${commit_release}" >> "$GITHUB_OUTPUT"
 
       - name: No release needed
         if: steps.update.outputs.changed != 'true' && steps.tag.outputs.exists == 'true'
-        run: echo "Release ${{ steps.tag.outputs.tag }} is already current for Paper ${{ inputs.paper_version }}."
+        run: echo "Release ${{ steps.tag.outputs.tag }} is already current for Paper ${{ steps.version.outputs.paper_api_version }}."
 
       - name: Refuse duplicate tag for changed metadata
         if: steps.update.outputs.changed == 'true' && steps.tag.outputs.exists == 'true'
@@ -118,3 +130,9 @@ jobs:
             --target "$(git rev-parse HEAD)" \
             --title "NoVillagerSpawnedGolems $VERSION for Paper $PAPER_API_VERSION" \
             --notes "Release $VERSION for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."
+
+      - name: Publish to Hangar
+        if: steps.tag.outputs.exists != 'true' && steps.tag.outputs.commit_release != 'true'
+        env:
+          HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
+        run: ./gradlew publishPluginPublicationToHangar --stacktrace

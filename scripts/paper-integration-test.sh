@@ -9,7 +9,9 @@ SERVER_LOG="$SERVER_DIR/logs/latest.log"
 SERVER_STDIN="$TEST_DIR/server.stdin"
 PAPER_API="${PAPER_API:-https://fill.papermc.io/v3/projects/paper}"
 PAPER_MINECRAFT_VERSION="${PAPER_MINECRAFT_VERSION:-$(sed -n 's/^paperApiVersion=//p' "$ROOT_DIR/gradle.properties" | head -n 1)}"
-PAPER_CHANNEL="${PAPER_CHANNEL:-STABLE}"
+PAPER_DEPENDENCY_VERSION="$(sed -n 's/^paperApiDependencyVersion=//p' "$ROOT_DIR/gradle.properties" | head -n 1)"
+PAPER_DEPENDENCY_CHANNEL="$(printf '%s' "$PAPER_DEPENDENCY_VERSION" | sed -n 's/.*-\([^-]*\)$/\1/p' | tr '[:lower:]' '[:upper:]')"
+PAPER_CHANNEL="${PAPER_CHANNEL:-${PAPER_DEPENDENCY_CHANNEL:-STABLE}}"
 PUMPKIN_PLACE_DELAY_SECONDS="${PUMPKIN_PLACE_DELAY_SECONDS:-2}"
 RUN_ID="NVSG_$(date +%s)_$$"
 SERVER_PID=""
@@ -50,32 +52,65 @@ def request_json(url):
         return json.load(resp)
 
 def version_key(version):
+    main, _, suffix = version.partition("-")
+
     parts = []
-    for part in re.split(r"([0-9]+|[A-Za-z]+)", version):
+    for part in re.split(r"([0-9]+|[A-Za-z]+)", main):
         if not part or part in ".-+_":
             continue
         if part.isdigit():
             parts.append((1, int(part)))
         else:
             parts.append((0, part.lower()))
-    return parts
+
+    suffix_parts = []
+    for part in re.split(r"([0-9]+|[A-Za-z]+)", suffix):
+        if not part or part in ".-+_":
+            continue
+        if part.isdigit():
+            suffix_parts.append((1, int(part)))
+        else:
+            suffix_parts.append((0, part.lower()))
+
+    release_rank = 1 if not suffix else 0
+    return (parts, release_rank, suffix_parts)
 
 def all_project_versions():
     project = request_json(api_base)
-    versions = project.get("versions", [])
+    if isinstance(project, list):
+        versions = project
+    else:
+        versions = project.get("versions", [])
     if isinstance(versions, dict):
         flattened = []
         for group_versions in versions.values():
             flattened.extend(group_versions)
         versions = flattened
-    return sorted(set(versions), key=version_key, reverse=True)
+
+    version_ids = []
+    for entry in versions:
+        if isinstance(entry, str):
+            version_ids.append(entry)
+            continue
+
+        if not isinstance(entry, dict):
+            continue
+
+        version = entry.get("version", entry)
+        if isinstance(version, str):
+            version_ids.append(version)
+        elif isinstance(version, dict) and version.get("id"):
+            version_ids.append(version["id"])
+
+    return sorted(set(version_ids), key=version_key, reverse=True)
 
 def latest_build_for(version):
     encoded_version = urllib.parse.quote(version, safe="")
     builds = request_json(f"{api_base}/versions/{encoded_version}/builds")
     candidates = [
         build for build in builds
-        if str(build.get("channel", "")).upper() == requested_channel
+        if requested_channel in {"LATEST", "ANY"}
+        or str(build.get("channel", "")).upper() == requested_channel
     ]
     if not candidates:
         return None

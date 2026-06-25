@@ -54,28 +54,42 @@ jobs:
         run: |
           version="$(./scripts/project-version.sh)"
           paper_api_version="$(./scripts/paper-api-version.sh)"
-          tag="v${version}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "paper_api_version=${paper_api_version}" >> "$GITHUB_OUTPUT"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
-      - name: Check release tag
+      - name: Resolve release tag
         id: tag
         run: |
-          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+          git fetch --tags --force
+          base_tag="v${{ steps.version.outputs.version }}"
+          head_commit="$(git rev-parse HEAD)"
+          short_commit="$(git rev-parse --short=12 HEAD)"
+          tag="$base_tag"
+
+          if git rev-parse "$base_tag" >/dev/null 2>&1; then
+            base_commit="$(git rev-list -n 1 "$base_tag")"
+            if [ "$base_commit" != "$head_commit" ]; then
+              tag="${base_tag}-g${short_commit}"
+            fi
+          fi
+
+          if git rev-parse "$tag" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "head_commit=${head_commit}" >> "$GITHUB_OUTPUT"
+          echo "short_commit=${short_commit}" >> "$GITHUB_OUTPUT"
 
       - name: No release needed
         if: steps.update.outputs.changed != 'true' && steps.tag.outputs.exists == 'true'
-        run: echo "Release ${{ steps.version.outputs.tag }} is already current for Paper ${{ inputs.paper_version }}."
+        run: echo "Release ${{ steps.tag.outputs.tag }} is already current for Paper ${{ inputs.paper_version }}."
 
       - name: Refuse duplicate tag for changed metadata
         if: steps.update.outputs.changed == 'true' && steps.tag.outputs.exists == 'true'
         run: |
-          echo "Tag ${{ steps.version.outputs.tag }} already exists." >&2
+          echo "Tag ${{ steps.tag.outputs.tag }} already exists." >&2
           exit 1
 
       - name: Run Paper integration tests
@@ -95,7 +109,7 @@ jobs:
         if: steps.tag.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
+          TAG: ${{ steps.tag.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
           PAPER_API_VERSION: ${{ steps.version.outputs.paper_api_version }}
         run: |

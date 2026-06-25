@@ -90,6 +90,11 @@ The release workflow runs the Paper integration test first. If the tests pass,
 it publishes a GitHub release tagged as `v<pluginVersion>` and attaches a jar
 named with both the plugin version and Paper API version.
 
+If `pluginVersion` is unchanged but `main` has new code, the workflow creates a
+commit-suffixed release tag such as `v1.0.3-gabc1234def56`. The server deployer
+downloads the release that targets the current `main` commit, so pushed plugin
+changes are not skipped just because the version was not bumped.
+
 ## Hangar Publishing
 
 The GitHub release workflows also publish successful releases to Hangar. The

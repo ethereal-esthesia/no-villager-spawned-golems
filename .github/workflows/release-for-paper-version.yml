@@ -1,0 +1,106 @@
+name: Release for Paper Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: Type "release" to create a release for the requested Paper version.
+        required: true
+        type: string
+      paper_version:
+        description: Paper/Minecraft API version to pin, for example 26.1.2.
+        required: true
+        type: string
+      paper_dependency_version:
+        description: Full Paper API dependency version, for example 26.1.2.build.72-stable.
+        required: true
+        type: string
+      plugin_version:
+        description: Optional explicit plugin version. Defaults to next patch when the Paper pin changes.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && inputs.confirm_release == 'release'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Update release metadata
+        id: update
+        run: |
+          args=(--paper-version "${{ inputs.paper_version }}" --paper-dependency-version "${{ inputs.paper_dependency_version }}")
+          if [ -n "${{ inputs.plugin_version }}" ]; then
+            args+=(--plugin-version "${{ inputs.plugin_version }}")
+          fi
+          ./scripts/update-to-paper-version.sh "${args[@]}"
+
+      - name: Read release version
+        id: version
+        run: |
+          version="$(./scripts/project-version.sh)"
+          paper_api_version="$(./scripts/paper-api-version.sh)"
+          tag="v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "paper_api_version=${paper_api_version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Check release tag
+        id: tag
+        run: |
+          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No release needed
+        if: steps.update.outputs.changed != 'true' && steps.tag.outputs.exists == 'true'
+        run: echo "Release ${{ steps.version.outputs.tag }} is already current for Paper ${{ inputs.paper_version }}."
+
+      - name: Refuse duplicate tag for changed metadata
+        if: steps.update.outputs.changed == 'true' && steps.tag.outputs.exists == 'true'
+        run: |
+          echo "Tag ${{ steps.version.outputs.tag }} already exists." >&2
+          exit 1
+
+      - name: Run Paper integration tests
+        if: steps.update.outputs.changed == 'true' || steps.tag.outputs.exists != 'true'
+        run: ./scripts/paper-integration-test.sh
+
+      - name: Commit release metadata
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradle.properties
+          git commit -m "Release ${{ steps.version.outputs.version }} for Paper ${{ steps.version.outputs.paper_api_version }}"
+          git push origin HEAD:main
+
+      - name: Create GitHub release
+        if: steps.tag.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PAPER_API_VERSION: ${{ steps.version.outputs.paper_api_version }}
+        run: |
+          gh release create "$TAG" \
+            build/libs/NoVillagerSpawnedGolems-"$VERSION"-paper-"$PAPER_API_VERSION".jar \
+            --target "$(git rev-parse HEAD)" \
+            --title "NoVillagerSpawnedGolems $VERSION for Paper $PAPER_API_VERSION" \
+            --notes "Release $VERSION for Paper $PAPER_API_VERSION. Paper integration tests passed before publishing."

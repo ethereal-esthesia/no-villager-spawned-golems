@@ -2,7 +2,7 @@ import io.papermc.hangarpublishplugin.model.Platforms
 
 plugins {
     java
-    id("io.papermc.hangar-publish-plugin") version "0.1.2"
+    id("io.papermc.hangar-publish-plugin") version "0.1.4"
 }
 
 group = "dev.shane.minecraft"

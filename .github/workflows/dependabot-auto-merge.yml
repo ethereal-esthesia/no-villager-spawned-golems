@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -40,6 +41,32 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge --squash --delete-branch "$PR_URL"
+
+      - name: Validate merged main
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build.yml --ref main
+
+      - name: Release merged Gradle update
+        if: >-
+          steps.metadata.outputs.package-ecosystem == 'gradle' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          paper_version="$(./scripts/paper-api-version.sh)"
+          paper_dependency_version="$(sed -n 's/^paperApiDependencyVersion=//p' gradle.properties)"
+          plugin_version="$(./scripts/project-version.sh)"
+          gh workflow run release-for-paper-version.yml \
+            --ref main \
+            -f confirm_release=release \
+            -f paper_version="$paper_version" \
+            -f paper_dependency_version="$paper_dependency_version" \
+            -f plugin_version="$plugin_version"
 
       - name: Leave major update for review
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'

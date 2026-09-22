@@ -34,7 +34,7 @@ jobs:
 
       - name: No Paper release needed
         if: steps.paper.outputs.changed != 'true'
-        run: echo "Pinned Paper version is already current; no release will be created."
+        run: echo "No newer eligible stable Paper build; retaining the current pin."
 
       - name: Run Paper integration tests
         if: steps.paper.outputs.changed == 'true'

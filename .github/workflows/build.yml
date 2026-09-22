@@ -22,5 +22,8 @@ jobs:
           distribution: temurin
           java-version: '25'
 
+      - name: Test release updater
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Run Paper integration tests
         run: ./scripts/paper-integration-test.sh

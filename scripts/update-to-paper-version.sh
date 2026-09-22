@@ -35,6 +35,7 @@ python3 - "$PROPERTIES_FILE" "$paper_version" "$paper_dependency_version" "$requ
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 path = Path(sys.argv[1])
@@ -42,15 +43,18 @@ paper_version = sys.argv[2]
 paper_dependency_version = sys.argv[3]
 requested_plugin_version = sys.argv[4]
 
-lines = path.read_text().splitlines()
+if not re.fullmatch(re.escape(paper_version) + r"[.]build[.][0-9]+-(alpha|beta|stable)", paper_dependency_version):
+    raise SystemExit("Paper dependency must match the requested Paper version and a valid build/channel")
+if requested_plugin_version and not re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", requested_plugin_version):
+    raise SystemExit("Plugin version must be major.minor.patch")
+
+lines = path.read_text().splitlines(keepends=True)
 props = {}
-order = []
 for line in lines:
     if not line or line.startswith("#") or "=" not in line:
         continue
     key, value = line.split("=", 1)
-    props[key] = value
-    order.append(key)
+    props[key] = value.strip()
 
 current_plugin_version = props.get("pluginVersion", "")
 current_paper_version = props.get("paperApiVersion", "")
@@ -78,12 +82,31 @@ props["pluginVersion"] = next_plugin_version
 props["paperApiVersion"] = paper_version
 props["paperApiDependencyVersion"] = paper_dependency_version
 
-for key in props:
-    if key not in order:
-        order.append(key)
-
 if changed:
-    path.write_text("".join(f"{key}={props[key]}\n" for key in order))
+    updates = {key: props[key] for key in (
+        "pluginVersion", "paperApiVersion", "paperApiDependencyVersion")}
+    result = []
+    seen = set()
+    for line in lines:
+        key = line.split("=", 1)[0]
+        if key in updates:
+            if key in seen:
+                raise SystemExit(f"Duplicate property: {key}")
+            seen.add(key)
+            result.append(f"{key}={updates[key]}\n")
+        else:
+            result.append(line)
+    if seen != updates.keys():
+        raise SystemExit("Missing required version properties")
+    # Replace atomically, after all validation, preserving other lines verbatim.
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        handle.write("".join(result))
+    try:
+        temporary.chmod(path.stat().st_mode)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 if changed:
     print(f"Updated Paper pin: {current_paper_version} -> {paper_version}")

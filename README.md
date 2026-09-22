@@ -66,14 +66,16 @@ once per week.
 The `Weekly Paper Release` workflow checks the latest stable Paper version once
 per week.
 
-- If the pinned `paperApiVersion` is already current, the workflow exits without
-  publishing anything.
-- If Paper has a newer stable version, the workflow updates `gradle.properties`,
-  bumps the plugin patch version, runs the Paper integration test, commits the
-  new pin, and publishes a release.
+- If no newer stable version/build is available, the workflow exits without publishing.
+- The weekly updater never downgrades the pinned Minecraft version or build number.
+  An explicitly selected alpha/beta pin is retained until a newer eligible stable build exists.
+- When a newer stable version/build is available, the workflow changes only the three
+  version properties, preserving Hangar configuration and comments, bumps the plugin
+  patch version, runs the Paper integration test, commits the new pin, and publishes.
+- Explicit version changes use `scripts/update-to-paper-version.sh`; this is also
+  the shared metadata writer used by the weekly updater.
 
-In other words: automated weekly releases happen only when the supported Paper
-version changes and the integration test passes.
+Run updater regression checks with `python3 -m unittest discover -s scripts -p 'test_*.py'`.
 
 ## Releases
 

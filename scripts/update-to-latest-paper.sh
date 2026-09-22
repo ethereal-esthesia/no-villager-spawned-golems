@@ -13,32 +13,35 @@ current_paper_dependency="$(sed -n 's/^paperApiDependencyVersion=//p' "$PROPERTI
 paper_info_file="$ROOT_DIR/build/latest-paper.txt"
 mkdir -p "$ROOT_DIR/build"
 
-python3 - "$PAPER_API" "$PAPER_CHANNEL" > "$paper_info_file" <<'PY'
+python3 - "$PAPER_API" "$PAPER_CHANNEL" "$current_paper_version" "$current_paper_dependency" > "$paper_info_file" <<'PY'
 import json
 import re
 import sys
 import urllib.parse
 import urllib.request
 
-api_base, requested_channel = sys.argv[1:3]
+api_base, requested_channel, current_version, current_dependency = sys.argv[1:5]
 api_base = api_base.rstrip("/")
 requested_channel = requested_channel.upper()
 
 def request_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "no-villager-spawned-golems-release/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "no-villager-spawned-golems-release/1.0 (https://github.com/ethereal-esthesia/no-villager-spawned-golems)"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.load(resp)
 
 def version_key(version):
+    main, _, suffix = version.partition("-")
     parts = []
-    for part in re.split(r"([0-9]+|[A-Za-z]+)", version):
+    for part in re.split(r"([0-9]+|[A-Za-z]+)", main):
         if not part or part in ".-+_":
             continue
         if part.isdigit():
             parts.append((1, int(part)))
         else:
             parts.append((0, part.lower()))
-    return parts
+    suffix_parts = tuple((1, int(p)) if p.isdigit() else (0, p.lower())
+                         for p in re.findall(r"[0-9]+|[A-Za-z]+", suffix))
+    return (parts, not bool(suffix), suffix_parts)
 
 project = request_json(api_base)
 versions = project.get("versions", [])
@@ -62,6 +65,16 @@ for version in sorted(set(versions), key=version_key, reverse=True):
     channel = str(build.get("channel", requested_channel)).lower()
     build_id = str(build.get("id"))
     dependency_version = f"{version}.build.{build_id}-{channel}"
+    current_build = re.fullmatch(re.escape(current_version) + r"[.]build[.]([0-9]+)-([a-z]+)", current_dependency)
+    if not current_build:
+        raise SystemExit(f"Cannot compare current Paper dependency: {current_dependency}")
+    if (version_key(version) < version_key(current_version)
+            or (version == current_version and int(build_id) <= int(current_build[1]))):
+        # Keep a newer explicitly selected version/build, even on another channel.
+        version = current_version
+        build_id, channel = current_build.groups()
+        dependency_version = current_dependency
+        print("No newer eligible Paper build; keeping current pin.", file=sys.stderr)
     print(version)
     print(build_id)
     print(channel)
@@ -83,6 +96,7 @@ if [ "$current_paper_version" = "$latest_paper_version" ] && [ "$current_paper_d
       echo "changed=false"
       echo "plugin_version=$current_plugin_version"
       echo "paper_api_version=$current_paper_version"
+      echo "paper_dependency_version=$current_paper_dependency"
       echo "paper_build=$latest_paper_build"
       echo "paper_channel=$latest_paper_channel"
     } >> "$GITHUB_OUTPUT"
@@ -90,28 +104,13 @@ if [ "$current_paper_version" = "$latest_paper_version" ] && [ "$current_paper_d
   exit 0
 fi
 
-IFS=. read -r major minor patch rest <<< "$current_plugin_version"
-if [ -z "${major:-}" ] || [ -z "${minor:-}" ] || [ -z "${patch:-}" ] || [ -n "${rest:-}" ]; then
-  echo "Cannot auto-bump non-semver pluginVersion: $current_plugin_version" >&2
-  exit 1
-fi
-
-next_plugin_version="$major.$minor.$((patch + 1))"
-
-cat > "$PROPERTIES_FILE" <<EOF
-pluginVersion=$next_plugin_version
-paperApiVersion=$latest_paper_version
-paperApiDependencyVersion=$latest_paper_dependency
-EOF
-
-echo "Updated Paper pin: $current_paper_version -> $latest_paper_version"
-echo "Updated plugin version: $current_plugin_version -> $next_plugin_version"
+# Share the metadata writer so unrelated properties are preserved.
+"$ROOT_DIR/scripts/update-to-paper-version.sh" \
+  --paper-version "$latest_paper_version" \
+  --paper-dependency-version "$latest_paper_dependency"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   {
-    echo "changed=true"
-    echo "plugin_version=$next_plugin_version"
-    echo "paper_api_version=$latest_paper_version"
     echo "paper_build=$latest_paper_build"
     echo "paper_channel=$latest_paper_channel"
   } >> "$GITHUB_OUTPUT"

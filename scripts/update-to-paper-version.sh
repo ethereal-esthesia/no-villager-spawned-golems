@@ -36,6 +36,7 @@ import os
 import re
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 path = Path(sys.argv[1])
@@ -43,8 +44,40 @@ paper_version = sys.argv[2]
 paper_dependency_version = sys.argv[3]
 requested_plugin_version = sys.argv[4]
 
-if not re.fullmatch(re.escape(paper_version) + r"[.]build[.][0-9]+-(alpha|beta|stable)", paper_dependency_version):
+
+def paper_api_artifact_exists(version, build_id, channel):
+    channel = str(channel).lower()
+    dependency = f"{version}.build.{build_id}-{channel}"
+    artifact = f"paper-api-{dependency}.pom"
+    for repo_base in [
+        os.environ.get("PAPER_MAVEN_BASE_URL", "https://repo.papermc.io/repository/maven-public"),
+        "https://repo.maven.apache.org/maven2",
+    ]:
+        repo_base = repo_base.rstrip("/")
+        candidate = f"{repo_base}/io/papermc/paper/paper-api/{dependency}/{artifact}"
+        try:
+            req = urllib.request.Request(candidate, method="HEAD", headers={"User-Agent": "no-villager-spawned-golems-release/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status < 400:
+                    return True
+        except Exception:
+            pass
+        try:
+            req = urllib.request.Request(candidate, headers={"User-Agent": "no-villager-spawned-golems-release/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status < 400:
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+match = re.fullmatch(rf"{re.escape(paper_version)}[.]build[.](\d+)-(alpha|beta|stable)", paper_dependency_version)
+if not match:
     raise SystemExit("Paper dependency must match the requested Paper version and a valid build/channel")
+build_id, dependency_channel = match.groups()
+if not paper_api_artifact_exists(paper_version, build_id, dependency_channel):
+    raise SystemExit(f"Paper dependency {paper_dependency_version} is not published to Maven; refusing update.")
 if requested_plugin_version and not re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", requested_plugin_version):
     raise SystemExit("Plugin version must be major.minor.patch")
 

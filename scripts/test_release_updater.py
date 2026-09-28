@@ -32,6 +32,7 @@ class ReleaseUpdaterTest(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         self.env = dict(os.environ, PAPER_API=f'http://127.0.0.1:{self.server.server_port}/project',
+                        PAPER_MAVEN_BASE_URL=f'http://127.0.0.1:{self.server.server_port}/maven',
                         PAPER_CHANNEL='STABLE', GITHUB_OUTPUT=str(self.output))
 
     def pin(self, version='26.2', build='121-stable'):
@@ -50,15 +51,24 @@ class ReleaseUpdaterTest(unittest.TestCase):
             (folder / 'builds').write_text(json.dumps([
                 {'id': number, 'channel': channel} for number, channel in builds]))
 
-    def run_script(self, script='update-to-latest-paper.sh', *args, success=True):
+    def fixture_maven(self, *artifacts):
+        for version, build, channel in artifacts:
+            dependency = f'{version}.build.{build}-{channel}'
+            path = self.api / 'maven' / 'io' / 'papermc' / 'paper' / 'paper-api' / dependency
+            path.mkdir(parents=True, exist_ok=True)
+            (path / f'paper-api-{dependency}.pom').write_text('<project />')
+
+    def run_script(self, script='update-to-latest-paper.sh', *args, success=True, env=None):
+        process_env = dict(self.env, **(env or {}))
         result = subprocess.run(['bash', str(self.root / 'scripts' / script), *args],
-                                env=self.env, capture_output=True, text=True)
+                                env=process_env, capture_output=True, text=True)
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result
 
     def test_upgrade_preserves_configuration_and_second_run_is_noop(self):
         before = self.pin()
         self.fixture({'26.2': [(123, 'STABLE'), (122, 'STABLE')]})
+        self.fixture_maven(('26.2', '123', 'stable'))
         self.run_script()
         expected = before.replace(b'1.0.34', b'1.0.35').replace(b'121-stable', b'123-stable')
         self.assertEqual(self.props.read_bytes(), expected)
@@ -71,6 +81,7 @@ class ReleaseUpdaterTest(unittest.TestCase):
     def test_stable_cannot_downgrade_alpha_version(self):
         before = self.pin('26.3', '32-alpha')
         self.fixture({'26.3': [(32, 'ALPHA')], '26.2': [(127, 'STABLE')]})
+        self.fixture_maven(('26.2', '127', 'stable'))
         self.run_script()
         self.assertEqual(self.props.read_bytes(), before)
         self.assertIn('changed=false', self.output.read_text())
@@ -78,19 +89,30 @@ class ReleaseUpdaterTest(unittest.TestCase):
     def test_stable_cannot_downgrade_build(self):
         before = self.pin('26.3', '32-alpha')
         self.fixture({'26.3': [(31, 'STABLE'), (32, 'ALPHA')]})
+        self.fixture_maven(('26.3', '31', 'stable'))
         self.run_script()
         self.assertEqual(self.props.read_bytes(), before)
 
     def test_newer_stable_can_replace_alpha(self):
         self.pin('26.3', '32-alpha')
         self.fixture({'26.3': [(33, 'STABLE')]})
+        self.fixture_maven(('26.3', '33', 'stable'))
         self.run_script()
         self.assertIn('26.3.build.33-stable', self.props.read_text())
         self.assertIn('hangarProjectId=', self.props.read_text())
 
+    def test_alpha_candidate_missing_from_maven_is_skipped(self):
+        before = self.pin('26.3', '32-alpha')
+        self.fixture({'26.3': [(133, 'ALPHA'), (32, 'ALPHA')]})
+        self.fixture_maven(('26.3', '32', 'alpha'))
+        result = self.run_script(env={'PAPER_CHANNEL': 'ALPHA'}, success=True)
+        self.assertEqual(self.props.read_bytes(), before)
+        self.assertIn('keeping current pin', (result.stdout + result.stderr).lower())
+
     def test_release_sorts_after_prerelease(self):
         self.pin('26.2', '121-stable')
         self.fixture({'26.3-pre1': [(99, 'STABLE')], '26.3': [(1, 'STABLE')]})
+        self.fixture_maven(('26.3', '1', 'stable'))
         self.run_script()
         self.assertIn('paperApiDependencyVersion=26.3.build.1-stable', self.props.read_text())
 

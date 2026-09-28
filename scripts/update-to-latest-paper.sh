@@ -15,6 +15,7 @@ mkdir -p "$ROOT_DIR/build"
 
 python3 - "$PAPER_API" "$PAPER_CHANNEL" "$current_paper_version" "$current_paper_dependency" > "$paper_info_file" <<'PY'
 import json
+import os
 import re
 import sys
 import urllib.parse
@@ -23,11 +24,40 @@ import urllib.request
 api_base, requested_channel, current_version, current_dependency = sys.argv[1:5]
 api_base = api_base.rstrip("/")
 requested_channel = requested_channel.upper()
+base_urls = [
+    os.environ.get("PAPER_MAVEN_BASE_URL", "https://repo.papermc.io/repository/maven-public"),
+    "https://repo.maven.apache.org/maven2",
+]
+
 
 def request_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": "no-villager-spawned-golems-release/1.0 (https://github.com/ethereal-esthesia/no-villager-spawned-golems)"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.load(resp)
+
+
+def paper_api_artifact_exists(version, build_id, channel):
+    channel = str(channel).lower()
+    artifact = f"paper-api-{version}.build.{build_id}-{channel}.pom"
+    for repo_base in base_urls:
+        repo_base = repo_base.rstrip("/")
+        candidate = f"{repo_base}/io/papermc/paper/paper-api/{version}.build.{build_id}-{channel}/{artifact}"
+        try:
+            req = urllib.request.Request(candidate, method="HEAD", headers={"User-Agent": "no-villager-spawned-golems-release/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status < 400:
+                    return True
+        except Exception:
+            pass
+        try:
+            req = urllib.request.Request(candidate, headers={"User-Agent": "no-villager-spawned-golems-release/1.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status < 400:
+                    return True
+        except Exception:
+            pass
+    return False
+
 
 def version_key(version):
     main, _, suffix = version.partition("-")
@@ -61,25 +91,29 @@ for version in sorted(set(versions), key=version_key, reverse=True):
     if not candidates:
         continue
 
-    build = sorted(candidates, key=lambda build: int(build.get("id", 0)), reverse=True)[0]
-    channel = str(build.get("channel", requested_channel)).lower()
-    build_id = str(build.get("id"))
-    dependency_version = f"{version}.build.{build_id}-{channel}"
-    current_build = re.fullmatch(re.escape(current_version) + r"[.]build[.]([0-9]+)-([a-z]+)", current_dependency)
-    if not current_build:
-        raise SystemExit(f"Cannot compare current Paper dependency: {current_dependency}")
-    if (version_key(version) < version_key(current_version)
-            or (version == current_version and int(build_id) <= int(current_build[1]))):
-        # Keep a newer explicitly selected version/build, even on another channel.
-        version = current_version
-        build_id, channel = current_build.groups()
-        dependency_version = current_dependency
-        print("No newer eligible Paper build; keeping current pin.", file=sys.stderr)
-    print(version)
-    print(build_id)
-    print(channel)
-    print(dependency_version)
-    raise SystemExit(0)
+    for build in sorted(candidates, key=lambda build: int(build.get("id", 0)), reverse=True):
+        channel = str(build.get("channel", requested_channel)).lower()
+        build_id = str(build.get("id"))
+        dependency_version = f"{version}.build.{build_id}-{channel}"
+        if not paper_api_artifact_exists(version, build_id, channel):
+            print(f"Skipping unavailable Paper build {dependency_version}; Maven artifact is not published.", file=sys.stderr)
+            continue
+
+        current_build = re.fullmatch(re.escape(current_version) + r"[.]build[.]([0-9]+)-([a-z]+)", current_dependency)
+        if not current_build:
+            raise SystemExit(f"Cannot compare current Paper dependency: {current_dependency}")
+        if (version_key(version) < version_key(current_version)
+                or (version == current_version and int(build_id) <= int(current_build[1]))):
+            # Keep a newer explicitly selected version/build, even on another channel.
+            version = current_version
+            build_id, channel = current_build.groups()
+            dependency_version = current_dependency
+            print("No newer eligible Paper build; keeping current pin.", file=sys.stderr)
+        print(version)
+        print(build_id)
+        print(channel)
+        print(dependency_version)
+        raise SystemExit(0)
 
 raise SystemExit(f"No {requested_channel} Paper builds found.")
 PY

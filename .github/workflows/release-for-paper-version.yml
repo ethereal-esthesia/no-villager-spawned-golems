@@ -144,4 +144,4 @@ jobs:
         if: steps.tag.outputs.exists != 'true' && steps.tag.outputs.commit_release != 'true'
         env:
           HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
-        run: ./gradlew publishPluginPublicationToHangar --stacktrace
+        run: ./scripts/gradlew-retry.sh publishPluginPublicationToHangar --stacktrace

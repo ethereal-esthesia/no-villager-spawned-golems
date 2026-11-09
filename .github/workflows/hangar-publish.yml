@@ -32,4 +32,4 @@ jobs:
       - name: Publish to Hangar
         env:
           HANGAR_API_TOKEN: ${{ secrets.HANGAR_API_TOKEN }}
-        run: ./gradlew publishPluginPublicationToHangar --stacktrace
+        run: ./scripts/gradlew-retry.sh publishPluginPublicationToHangar --stacktrace

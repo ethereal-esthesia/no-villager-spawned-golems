@@ -199,7 +199,7 @@ wait_for_test_chunk() {
   exit 1
 }
 
-"$ROOT_DIR/gradlew" -p "$ROOT_DIR" clean build
+"$ROOT_DIR/scripts/gradlew-retry.sh" -p "$ROOT_DIR" clean build
 
 paper_info_file="$TEST_DIR/paper-download.txt"
 mkdir -p "$TEST_DIR"
